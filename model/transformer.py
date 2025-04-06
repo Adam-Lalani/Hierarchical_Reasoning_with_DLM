@@ -5,7 +5,7 @@ import numpy as np
 import math
 
 from einops import rearrange
-from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
+#from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
 # from flash_attn.ops.fused_dense import FusedMLP, FusedDense
 from huggingface_hub import PyTorchModelHubMixin
 from omegaconf import OmegaConf
@@ -177,10 +177,18 @@ class DDiTBlock(nn.Module):
             )
         else:
             cu_seqlens = seqlens.cumsum(-1)
-        x = flash_attn_varlen_qkvpacked_func(
-            qkv, cu_seqlens, seq_len, 0., causal=False)
         
-        x = rearrange(x, '(b s) h d -> b s (h d)', b=batch_size)
+        q, k, v = qkv.unbind(dim=2)  # shape: (B*S, H, D)
+        q = rearrange(q, '(b s) h d -> b s h d', b=batch_size)
+        k = rearrange(k, '(b s) h d -> b s h d', b=batch_size)
+        v = rearrange(v, '(b s) h d -> b s h d', b=batch_size)
+
+        # Scaled dot-product attention
+        scale = q.shape[-1] ** -0.5
+        attn = torch.softmax(torch.matmul(q, k.transpose(-1, -2)) * scale, dim=-1)
+        x = torch.matmul(attn, v)  # shape: (B, S, H, D)
+
+        x = rearrange(x, 'b s h d -> b s (h d)')
 
         x = bias_dropout_scale_fn(self.attn_out(x), None, gate_msa, x_skip, self.dropout)
 
