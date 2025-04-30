@@ -22,4 +22,6 @@ core
 *.jsonl
 
 data/
+official_data_pipeline/
 
+myenv/
