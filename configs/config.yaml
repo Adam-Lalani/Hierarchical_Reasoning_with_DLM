@@ -66,3 +66,4 @@ model:
   num_layers: 12
   num_heads: 12
   dropout: 0.1
+  cond_dim: 768
