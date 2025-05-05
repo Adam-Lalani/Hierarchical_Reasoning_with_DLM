@@ -32,10 +32,14 @@ def get_hierarchical_step_fn(noise, graph, train, optimize_fn=None, accum=1):
             model.eval()
             noise.eval()
 
-        # Unpack batch
-        input_ids = batch['input_ids'].cuda()
-        attention_mask = batch['attention_mask'].cuda()
-        clamp_idx = batch['clamp_idx'].cuda()
+        # Unpack batch and ensure proper types
+        input_ids = batch['input_ids'].to(torch.long).cuda()  # Ensure long type for indices
+        attention_mask = batch['attention_mask'].to(torch.float32).cuda()
+        clamp_idx = batch['clamp_idx']
+        if isinstance(clamp_idx, torch.Tensor):
+            clamp_idx = clamp_idx.to(torch.long).cuda()
+        else:
+            clamp_idx = torch.tensor(clamp_idx, dtype=torch.long).cuda()
         
         # Create clamping mask
         clamp_mask = create_clamp_mask(clamp_idx, input_ids.shape, input_ids.device)
@@ -54,10 +58,10 @@ def get_hierarchical_step_fn(noise, graph, train, optimize_fn=None, accum=1):
                 
                 # Get model prediction
                 log_score_fn = mutils.get_score_fn(model, train=train, sampling=False)
-                log_score = log_score_fn(xt, sigma)
+                log_score = log_score_fn(xt.to(torch.long), sigma)  # Ensure long type for indices
                 
                 # Calculate SEDD loss
-                raw_loss = graph.score_entropy(log_score, sigma[:, None], xt, x0)
+                raw_loss = graph.score_entropy(log_score, sigma[:, None], xt.to(torch.long), x0.to(torch.long))  # Ensure long type
                 
                 # Weight loss by dsigma (SEDD-specific)
                 weighted_loss = (dsigma[:, None] * raw_loss)
@@ -66,42 +70,22 @@ def get_hierarchical_step_fn(noise, graph, train, optimize_fn=None, accum=1):
                 masked_loss = apply_mask_to_sedd_loss(weighted_loss, attention_mask)
                 
             return masked_loss
-            
+        
+        # Forward pass and loss calculation
+        loss = loss_fn(input_ids) / accum
+        
+        # Backward pass and optimization
         if train:
-            x0 = input_ids
-            loss = loss_fn(x0) / accum
-            
-            # Scale loss and backpropagate
             scaler.scale(loss).backward()
-            
             accum_iter += 1
-            total_loss += loss.detach()
             
             if accum_iter == accum:
-                accum_iter = 0
-                
-                state['step'] += 1
-                if optimize_fn is not None:
-                    optimize_fn(optimizer, scaler, model.parameters(), step=state['step'])
-                else:
-                    scaler.step(optimizer)
-                    scaler.update()
-                    
-                state['ema'].update(model.parameters())
+                scaler.step(optimizer)
+                scaler.update()
                 optimizer.zero_grad()
-                
-                loss = total_loss
-                total_loss = 0
-            
-        else:
-            with torch.no_grad():
-                ema = state['ema']
-                ema.store(model.parameters())
-                ema.copy_to(model.parameters())
-                x0 = input_ids
-                loss = loss_fn(x0)
-                ema.restore(model.parameters())
+                accum_iter = 0
+                state['step'] += 1
         
         return loss
-        
+    
     return step_fn 

@@ -66,13 +66,25 @@ class Graph(abc.ABC):
         pass
 
 
-    def sample_transition(self, i, sigma):
-        """
-        Samples the transition vector.
-        """
-        transition_vector = self.transition(i, sigma)
-        return sample_categorical(transition_vector, method="hard")
-    
+    def sample_transition(self, x0, sigma):
+        """Sample from the transition kernel."""
+        # Ensure input is long type
+        x0 = x0.to(torch.long)
+        
+        # Get transition probabilities
+        trans = self.get_transition_matrix(sigma)
+        
+        # Sample from categorical distribution
+        x0_flat = x0.reshape(-1)
+        trans_flat = trans.repeat(len(x0_flat), 1, 1)
+        xt_flat = torch.distributions.Categorical(
+            logits=trans_flat[torch.arange(len(x0_flat)), x0_flat]
+        ).sample()
+        
+        # Reshape back to original dimensions
+        xt = xt_flat.reshape(x0.shape).to(torch.long)
+        
+        return xt
 
     def reverse_rate(self, i, score):
         """
@@ -106,10 +118,8 @@ class Graph(abc.ABC):
 
 
     @abc.abstractmethod
-    def score_entropy(self, score, sigma, x, x0):
-        """
-        Computes the score entropy function (with requisite constant normalization)
-        """
+    def score_entropy(self, log_score, sigma, xt, x0):
+        """Compute score matching objective."""
         pass
 
 
@@ -145,12 +155,6 @@ class Uniform(Graph):
     def transp_transition(self, i, sigma):
         return self.transition(i, sigma)
 
-    def sample_transition(self, i, sigma):
-        move_chance = 1 - (-sigma).exp()
-        move_indices = torch.rand(*i.shape, device=i.device) < move_chance
-        i_pert = torch.where(move_indices, torch.randint_like(i, self.dim), i)
-        return i_pert
-
     def staggered_score(self, score, dsigma):
         dim = score.shape[-1]
         epow = (-dsigma).exp()[..., None]
@@ -159,34 +163,21 @@ class Uniform(Graph):
     def sample_limit(self, *batch_dims):
         return torch.randint(0, self.dim, batch_dims)
 
-    def score_entropy(self, score, sigma, x, x0):
-        esigm1 = torch.where(
-            sigma < 0.5,
-            torch.expm1(sigma),
-            torch.exp(sigma) - 1
-        )
-        ratio = 1 - self.dim / (esigm1 + self.dim)
-
-        # negative term
-        neg_term = score.mean(dim=-1) - torch.gather(score, -1, x[..., None]).squeeze(-1) / self.dim
-        # no move means scaling by the uniform ratio. move means alter only one ratio away from 1
-        neg_term = torch.where(
-            x == x0,
-            ratio * neg_term,
-            torch.gather(score, -1, x0[..., None]).squeeze(-1) / esigm1 + neg_term
-        )
-
-        # constant factor
-        const = torch.where(
-            x == x0,
-            (self.dim - 1) / self.dim * ratio * (ratio.log() - 1),
-            ((-ratio.log() - 1) / ratio - (self.dim - 2)) / self.dim 
-        )
-
-        #positive term
-        sexp = score.exp()
-        pos_term = sexp.mean(dim=-1) - torch.gather(sexp, -1, x[..., None]).squeeze(-1) / self.dim
-        return pos_term - neg_term + const
+    def score_entropy(self, log_score, sigma, xt, x0):
+        """Compute score matching objective."""
+        # Ensure inputs are long type
+        xt = xt.to(torch.long)
+        x0 = x0.to(torch.long)
+        
+        # Get transition probabilities
+        trans = self.get_transition_matrix(sigma)
+        
+        # Compute score matching objective
+        log_prob = torch.log_softmax(log_score, dim=-1)
+        target = torch.zeros_like(log_prob)
+        target.scatter_(-1, x0.unsqueeze(-1), 1)
+        
+        return -(target * log_prob).sum(-1)
 
 
 class Absorbing(Graph):
@@ -241,27 +232,19 @@ class Absorbing(Graph):
     def sample_limit(self, *batch_dims):
         return (self.dim - 1) * torch.ones(*batch_dims, dtype=torch.int64)
 
-    def score_entropy(self, score, sigma, x, x0):
-        rel_ind = x == self.dim - 1
-        esigm1 = torch.where(
-            sigma < 0.5,
-            torch.expm1(sigma),
-            torch.exp(sigma) - 1
-        )
-
-        ratio = 1 / esigm1.expand_as(x)[rel_ind]
-        other_ind = x0[rel_ind]
-
-        # negative_term
-        neg_term = ratio * torch.gather(score[rel_ind], -1, other_ind[..., None]).squeeze(-1)
-
-        #positive term
-        pos_term = score[rel_ind][:, :-1].exp().sum(dim=-1)
-
-        # constant term
-        const = ratio * (ratio.log() - 1)
-
-        entropy = torch.zeros(*x.shape, device=x.device)
-        entropy[rel_ind] += pos_term - neg_term + const
-        return entropy
+    def score_entropy(self, log_score, sigma, xt, x0):
+        """Compute score matching objective."""
+        # Ensure inputs are long type
+        xt = xt.to(torch.long)
+        x0 = x0.to(torch.long)
+        
+        # Get transition probabilities
+        trans = self.get_transition_matrix(sigma)
+        
+        # Compute score matching objective
+        log_prob = torch.log_softmax(log_score, dim=-1)
+        target = torch.zeros_like(log_prob)
+        target.scatter_(-1, x0.unsqueeze(-1), 1)
+        
+        return -(target * log_prob).sum(-1)
     
