@@ -194,8 +194,6 @@ class Absorbing(Graph):
         return True
 
     def rate(self, i):
-        # edge = - F.one_hot(i, num_classes=self.dim)
-        # edge.scatter_add_(-1, i[..., None], torch.ones_like(edge[..., :1]))
         return F.one_hot((self.dim - 1) * torch.ones_like(i), num_classes=self.dim) - F.one_hot(i, num_classes=self.dim)        
 
     def transp_rate(self, i):
@@ -204,7 +202,16 @@ class Absorbing(Graph):
         return edge
 
     def transition(self, i, sigma):
-        pass
+        """Compute transition probabilities."""
+        # Create transition matrix
+        sigma = unsqueeze_as(sigma, i[..., None])
+        edge = (-sigma).exp() * F.one_hot(i, num_classes=self.dim)
+        edge += torch.where(
+            i == self.dim - 1,
+            1 - (-sigma).squeeze(-1).exp(),
+            0
+        )[..., None]
+        return edge
     
     def transp_transition(self, i, sigma):
         sigma = unsqueeze_as(sigma, i[..., None])
@@ -223,7 +230,7 @@ class Absorbing(Graph):
         return i_pert
     
     def staggered_score(self, score, dsigma):
-        score = score.clone() # yeah yeah whatever we should probably do this
+        score = score.clone()
         extra_const = (1 - (dsigma).exp()) * score.sum(dim=-1)
         score *= dsigma.exp()[:, None]
         score[..., -1] += extra_const
@@ -238,10 +245,7 @@ class Absorbing(Graph):
         xt = xt.to(torch.long)
         x0 = x0.to(torch.long)
         
-        # Get transition probabilities
-        trans = self.get_transition_matrix(sigma)
-        
-        # Compute score matching objective
+        # Compute score matching objective using log_softmax
         log_prob = torch.log_softmax(log_score, dim=-1)
         target = torch.zeros_like(log_prob)
         target.scatter_(-1, x0.unsqueeze(-1), 1)
