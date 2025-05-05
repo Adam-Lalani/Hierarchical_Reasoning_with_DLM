@@ -1,17 +1,16 @@
 defaults:
   - _self_
-  - model: small
-  - override hydra/launcher: submitit_slurm
+  - hydra/launcher: basic
 
-ngpus: 8
+ngpus: 1
 tokens: 50257
 
 training:
-  batch_size: 512
+  batch_size: 2
   accum: 1
-  n_iters: 1300001
+  n_iters: 10000
   snapshot_freq: 50000
-  log_freq: 50
+  log_freq: 10
   eval_freq: 100
   snapshot_freq_for_preemption: 10000
   weight: standard
@@ -19,9 +18,10 @@ training:
   ema: 0.9999
 
 data:
-  train: openwebtext
-  valid: wikitext103
+  train: "data_/train_set.csv"
+  valid: "data_/val_set.csv"
   cache_dir: data
+  max_length: 1024
 
 graph:
   type: absorb
@@ -44,19 +44,20 @@ eval:
   perplexity_batch_size: 32
 
 optim:
-  weight_decay: 0
+  weight_decay: 0.0
   optimizer: AdamW
-  lr: 3e-4
+  lr: 2e-5
   beta1: 0.9
   beta2: 0.999
   eps: 1e-8
-  warmup: 2500
-  grad_clip: 1.
-
+  warmup: 100
+  grad_clip: 1.0
 
 hydra:
+  job:
+    chdir: true
   run:
-    dir: exp_local/${data.train}/${now:%Y.%m.%d}/${now:%H%M%S}
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
   sweep:
     dir: exp/${data.train}/${now:%Y.%m.%d}/${now:%H%M%S}
     subdir: ${hydra.job.num}
@@ -69,3 +70,11 @@ hydra:
     cpus_per_task: 40
     gpus_per_node: ${ngpus}
     constraint: null
+
+# Model configuration
+model:
+  name: "sedd"
+  hidden_dim: 768
+  num_layers: 12
+  num_heads: 12
+  dropout: 0.1
