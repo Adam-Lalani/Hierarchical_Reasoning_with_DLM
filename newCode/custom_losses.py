@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from .train_utils import create_clamp_mask, apply_clamping, apply_mask_to_sedd_loss
+from train_utils import create_clamp_mask, apply_clamping, apply_mask_to_sedd_loss
 from model import utils as mutils
 
 def get_hierarchical_step_fn(noise, graph, train, optimize_fn=None, accum=1):
