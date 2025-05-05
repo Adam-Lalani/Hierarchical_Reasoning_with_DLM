@@ -58,18 +58,6 @@ hydra:
     chdir: true
   run:
     dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
-  sweep:
-    dir: exp/${data.train}/${now:%Y.%m.%d}/${now:%H%M%S}
-    subdir: ${hydra.job.num}
-  launcher:
-    max_num_timeout: 100000
-    # timeout_min: 10079
-    partition: g40x
-    account: stanford
-    mem_gb: 96
-    cpus_per_task: 40
-    gpus_per_node: ${ngpus}
-    constraint: null
 
 # Model configuration
 model:

@@ -22,16 +22,6 @@ from custom_losses import get_hierarchical_step_fn
 
 @hydra.main(config_path="../configs", config_name="config", version_base="1.1")
 def main(cfg):
-    # Update config for our specific case - A100 specific settings
-    cfg.ngpus = 1  # Only using 1 A100
-    cfg.data.train = "data_/train_set.csv"
-    cfg.data.valid = "data_/val_set.csv"
-    cfg.training.batch_size = 32  # A100 has 40-80GB memory, can handle larger batches
-    cfg.training.n_iters = 10000  # Will be overridden by epoch-based training
-    cfg.optim.lr = 2e-5  # Smaller learning rate for fine-tuning
-    cfg.optim.warmup = 100  # Shorter warmup for fine-tuning
-    cfg.training.log_freq = 10  # More frequent logging
-    
     # Setup device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
