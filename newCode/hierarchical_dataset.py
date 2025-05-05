@@ -23,8 +23,9 @@ class HierarchicalMathDataset(Dataset):
     
     def find_clamp_index(self, input_ids):
         """Find the index before [12, 4971, 5224] sequence in input_ids"""
-        input_ids = torch.tensor(input_ids)
-        target_seq = torch.tensor([12, 4971, 5224])
+        if not isinstance(input_ids, torch.Tensor):
+            input_ids = torch.tensor(input_ids, dtype=torch.long)
+        target_seq = torch.tensor([12, 4971, 5224], dtype=torch.long)
         
         # Find all occurrences of the first token (12)
         # Add 1 to include token 12 in the clamped sequence
@@ -43,9 +44,9 @@ class HierarchicalMathDataset(Dataset):
         # Get data from pandas
         item = self.data.iloc[idx]
         
-        # Convert to tensors
-        input_ids = torch.tensor(item['input_ids'])
-        attention_mask = torch.tensor(item['attention_mask'])
+        # Convert to tensors with proper dtypes
+        input_ids = torch.tensor(item['input_ids'], dtype=torch.long)  # Use long for indices
+        attention_mask = torch.tensor(item['attention_mask'], dtype=torch.float32)  # Use float for mask
         
         # Find clamp index
         clamp_idx = self.find_clamp_index(input_ids)
