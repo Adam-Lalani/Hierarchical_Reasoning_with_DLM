@@ -7,7 +7,7 @@ __pycache__
 .DS_Store
 **.pyc
 *.png
-*.txt
+
 **/outputs/
 **/wandb/
 **/exp/
