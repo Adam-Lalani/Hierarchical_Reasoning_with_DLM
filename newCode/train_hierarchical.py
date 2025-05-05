@@ -6,6 +6,7 @@ from omegaconf import OmegaConf
 from transformers import GPT2TokenizerFast
 import math
 import time
+from tqdm import tqdm
 
 # Add parent directory to path to import from original codebase
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -109,7 +110,10 @@ def main(cfg):
     # For loss tracking
     epoch_losses = []
     
-    for epoch in range(num_epochs):
+    # Create progress bar for epochs
+    epoch_pbar = tqdm(range(num_epochs), desc="Epochs", position=0)
+    
+    for epoch in epoch_pbar:
         state['epoch'] = epoch
         epoch_start_time = time.time()
         epoch_loss = 0.0
@@ -118,7 +122,10 @@ def main(cfg):
         # Reset iterator for each epoch
         train_iter = iter(train_loader)
         
-        for step in range(steps_per_epoch):
+        # Create progress bar for steps within epoch
+        step_pbar = tqdm(range(steps_per_epoch), desc=f"Epoch {epoch+1}", position=1, leave=False)
+        
+        for step in step_pbar:
             try:
                 batch = next(train_iter)
             except StopIteration:
@@ -133,10 +140,13 @@ def main(cfg):
             epoch_loss += loss.item()
             steps_this_epoch += 1
             
+            # Update step progress bar
+            step_pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+            
             # Logging
             if global_step % cfg.training.log_freq == 0:
-                print(f"Epoch {epoch+1}/{num_epochs}, Step {step+1}/{steps_per_epoch}, "
-                      f"Global Step {global_step}, Loss: {loss.item():.4f}")
+                avg_loss = epoch_loss / steps_this_epoch
+                epoch_pbar.set_postfix({'avg_loss': f'{avg_loss:.4f}'})
         
         # End of epoch
         epoch_end_time = time.time()
@@ -144,7 +154,7 @@ def main(cfg):
         avg_epoch_loss = epoch_loss / steps_this_epoch
         epoch_losses.append(avg_epoch_loss)
         
-        print(f"Epoch {epoch+1}/{num_epochs} completed in {epoch_duration:.2f}s")
+        print(f"\nEpoch {epoch+1}/{num_epochs} completed in {epoch_duration:.2f}s")
         print(f"Average loss: {avg_epoch_loss:.4f}")
         
         # Save epoch metrics
@@ -174,7 +184,7 @@ def main(cfg):
         print(f"Saved EMA weights for epoch {epoch+1}")
     
     # End of training
-    print("Training completed!")
+    print("\nTraining completed!")
     print("Loss by epoch:")
     for i, loss in enumerate(epoch_losses):
         print(f"Epoch {i+1}: {loss:.6f}")
