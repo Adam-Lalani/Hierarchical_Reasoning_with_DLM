@@ -62,8 +62,12 @@ hydra:
 # Model configuration
 model:
   name: "sedd"
+  type: "ddit"
   hidden_size: 768
   num_layers: 12
-  num_heads: 12
+  n_heads: 12
+  n_blocks: 12 
   dropout: 0.1
+  scale_by_sigma: True
   cond_dim: 768
+  length: 512
