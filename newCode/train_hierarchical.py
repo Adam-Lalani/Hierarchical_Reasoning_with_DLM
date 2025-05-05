@@ -26,7 +26,8 @@ from custom_losses import get_hierarchical_step_fn
 def main(cfg):
     # Convert relative data paths to absolute paths
     cfg.data.train = os.path.join(project_root, cfg.data.train)
-    cfg.data.valid = os.path.join(project_root, cfg.data.valid)
+    if cfg.data.valid is not None:  # Only join paths if valid path exists
+        cfg.data.valid = os.path.join(project_root, cfg.data.valid)
     
     # Setup device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
