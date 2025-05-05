@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - hydra/launcher: basic
+  - override hydra/launcher: basic
 
 ngpus: 1
 tokens: 50257

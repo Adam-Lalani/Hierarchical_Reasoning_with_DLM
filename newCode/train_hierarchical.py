@@ -8,7 +8,8 @@ import math
 import time
 
 # Add parent directory to path to import from original codebase
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 from model import SEDD
 from model.ema import ExponentialMovingAverage
@@ -22,6 +23,10 @@ from custom_losses import get_hierarchical_step_fn
 
 @hydra.main(config_path="../configs", config_name="config", version_base="1.1")
 def main(cfg):
+    # Convert relative data paths to absolute paths
+    cfg.data.train = os.path.join(project_root, cfg.data.train)
+    cfg.data.valid = os.path.join(project_root, cfg.data.valid)
+    
     # Setup device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
