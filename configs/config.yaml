@@ -1,0 +1,73 @@
+defaults:
+  - _self_
+  - override hydra/launcher: basic
+
+ngpus: 1
+tokens: 50257
+
+training:
+  batch_size: 2
+  accum: 1
+  n_iters: 100
+  snapshot_freq: 10
+  log_freq: 5
+  eval_freq: 10
+  snapshot_freq_for_preemption: 20
+  weight: standard
+  snapshot_sampling: True
+  ema: 0.9999
+
+data:
+  train: "data_/dummy_train_set.csv"
+  valid: null
+  cache_dir: data
+  max_length: 128
+
+graph:
+  type: absorb
+  file: data
+  report_all: False
+
+noise:
+  type: loglinear
+  sigma_min: 1e-4
+  sigma_max: 20
+
+sampling:
+  predictor: euler
+  steps: 128
+  noise_removal: True
+
+eval:
+  batch_size: 512
+  perplexity: True
+  perplexity_batch_size: 32
+
+optim:
+  weight_decay: 0.0
+  optimizer: AdamW
+  lr: 2e-5
+  beta1: 0.9
+  beta2: 0.999
+  eps: 1e-8
+  warmup: 100
+  grad_clip: 1.0
+
+hydra:
+  job:
+    chdir: true
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+# Model configuration
+model:
+  name: "sedd"
+#  type: "ddit"
+  hidden_size: 768
+  num_layers: 12
+  n_heads: 12
+  n_blocks: 12 
+  dropout: 0.1
+  scale_by_sigma: True
+  cond_dim: 768
+  length: 512
