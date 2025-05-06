@@ -145,7 +145,15 @@ def main(cfg: DictConfig):
 
         total_steps = steps_per_epoch * num_epochs
         # Calculate frequency to save ~100 checkpoints, ensure it's at least 1
-        checkpoint_saving_freq = max(1, total_steps // 100) if total_steps > 0 else 100 # Avoid division by zero
+        # For testing with dummy dataset, ensure a minimum frequency (e.g., 50) 
+        # so checkpoints are saved even if total_steps // 100 is very small or 0.
+        # Adjust MIN_SAVE_FREQ_FOR_TESTING as needed.
+        MIN_SAVE_FREQ_FOR_TESTING = 50 
+        calculated_freq = max(1, total_steps // 100) if total_steps > 0 else 100 # Avoid division by zero
+        checkpoint_saving_freq = max(calculated_freq, MIN_SAVE_FREQ_FOR_TESTING) if num_examples < 1000 else calculated_freq # Apply min only for small (dummy) datasets
+        # Add a specific override if total_steps is very small (e.g. dummy data one epoch)
+        if total_steps <= MIN_SAVE_FREQ_FOR_TESTING:
+            checkpoint_saving_freq = max(1, total_steps // 2) if total_steps > 1 else 1 # Save at least once or twice if very few steps
 
         print(f"Dataset size: {num_examples} examples")
         print(f"Steps per epoch: {steps_per_epoch}")
