@@ -1,13 +1,62 @@
+# Python
 .vscode/
 build/
 dist/
 *.egg-info/
-__pycache__
-.ipynb_checkpoints/
-.DS_Store
-**.pyc
-*.png
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+myenv/
 
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE specific files
+.idea/
+*.swp
+*.swo
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Distribution / packaging
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Project specific
 **/outputs/
 **/wandb/
 **/exp/
@@ -20,8 +69,61 @@ assets/
 core
 **.log
 *.jsonl
+*.png
 
+# Data directories
 data/
 official_data_pipeline/
+data_/
 
+# Model files and large files
+*.h5
+*.hdf5
+*.pkl
+*.model
+*.joblib
+*.pt
+*.onnx
+*.tflite
+*.pb
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+logs/
+
+# Large data files
+data_/*.csv
+data_/*.csv.bak
+
+# Virtual Environment
 myenv/
+venv/
+ENV/
+env/
+.env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs and databases
+*.log
+*.sqlite
+logs/
+
+# Large data files
+data_/*.csv
+data_/*.csv.bak
