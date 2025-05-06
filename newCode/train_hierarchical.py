@@ -269,7 +269,7 @@ def main(cfg: DictConfig):
                             with io.BytesIO() as buffer:
                                 torch.save(state, buffer)
                                 buffer.seek(0)
-                                artifact_state.add_file(buffer, name=f'state_step_{global_step}.pt')
+                                artifact_state.add_file(wandb.File(name=f'state_step_{global_step}.pt', mode="wb", data=buffer))
                             run.log_artifact(artifact_state)
                             print(f"Logged full state artifact to W&B: {artifact_name}")
                         else:
@@ -292,7 +292,7 @@ def main(cfg: DictConfig):
                             with io.BytesIO() as buffer:
                                 torch.save(score_model.state_dict(), buffer)
                                 buffer.seek(0)
-                                artifact_ema.add_file(buffer, name=f'ema_weights_step_{global_step}.pt')
+                                artifact_ema.add_file(wandb.File(name=f'ema_weights_step_{global_step}.pt', mode="wb", data=buffer))
                             run.log_artifact(artifact_ema)
                             print(f"Logged EMA weights artifact to W&B: {artifact_name_ema}")
                             
