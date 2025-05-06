@@ -7,6 +7,10 @@ from transformers import GPT2TokenizerFast
 import math
 import time
 from tqdm import tqdm
+import matplotlib
+matplotlib.use('Agg') # Use non-interactive backend for saving plots on servers
+import matplotlib.pyplot as plt
+import json # To save the epoch loss data easily
 
 # Add parent directory to path to import from original codebase
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -60,7 +64,7 @@ def main(cfg):
     # Calculate total number of steps for 2 epochs
     num_examples = len(train_loader.dataset)
     steps_per_epoch = math.ceil(num_examples / cfg.training.batch_size)
-    num_epochs = 2  # Train for 2 epochs
+    num_epochs = 10000  # Training epochs
     total_steps = steps_per_epoch * num_epochs
     print(f"Dataset size: {num_examples} examples")
     print(f"Steps per epoch: {steps_per_epoch}")
@@ -180,7 +184,7 @@ def main(cfg):
             checkpoint_dir,
             f'ema_weights_epoch_{epoch+1}.pt'
         )
-        torch.save(score_model.state_dict(), ema_path)
+        # torch.save(score_model.state_dict(), ema_path)
         ema.restore(score_model.parameters())
         print(f"Saved EMA weights for epoch {epoch+1} to directory: {os.path.dirname(ema_path)}")
     
@@ -190,6 +194,44 @@ def main(cfg):
     for i, loss in enumerate(epoch_losses):
         print(f"Epoch {i+1}: {loss:.6f}")
     
+    # --- Save epoch loss data ---
+    epoch_loss_path = os.path.join(log_dir, "epoch_losses.json")
+    try:
+        with open(epoch_loss_path, "w") as f:
+            # Store as a list of [epoch_num, loss_value] for consistency with plotting
+            epoch_loss_data = [[i+1, loss] for i, loss in enumerate(epoch_losses)]
+            json.dump(epoch_loss_data, f)
+        print(f"Saved epoch loss data to {epoch_loss_path}")
+    except Exception as e:
+        print(f"Error saving epoch loss data: {e}")
+    # --- End saving epoch loss data ---
+
+    # --- Plotting Epoch Loss Curve ---
+    plot_path = os.path.join(output_dir, "epoch_loss_curve.png")
+    try:
+        if epoch_losses: # Check if there's data to plot
+            epochs = range(1, len(epoch_losses) + 1)
+            
+            plt.figure(figsize=(12, 6))
+            plt.plot(epochs, epoch_losses, marker='o', linestyle='-', label='Average Training Loss per Epoch')
+            plt.xlabel("Epoch")
+            plt.ylabel("Average Loss")
+            plt.title("Epoch vs. Average Training Loss")
+            plt.xticks(epochs) # Ensure ticks for each epoch if not too many
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(plot_path)
+            plt.close() # Close the figure to free memory
+            print(f"Saved epoch loss plot to {plot_path}")
+        else:
+            print("No epoch losses recorded, skipping plot generation.")
+            
+    except ImportError:
+        print("Matplotlib not found. Skipping plot generation. Install with 'pip install matplotlib'")
+    except Exception as e:
+        print(f"Error generating plot: {e}")
+    # --- End Plotting Epoch Loss Curve ---
+
     # Save final metrics
     with open(os.path.join(output_dir, "final_metrics.txt"), "w") as f:
         f.write(f"Total Epochs: {num_epochs}\n")
