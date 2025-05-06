@@ -257,31 +257,46 @@ def main(cfg: DictConfig):
                 if global_step > 0 and global_step % checkpoint_saving_freq == 0:
                     print(f"\nLogging checkpoint artifact directly to W&B at step {global_step} (no local disk save for model weights)...")
 
-                    # 1. Save Full State to Buffer and Log Artifact
+                    # 1. Save Full State, Log Artifact, then Remove Local File
+                    full_state_path = os.path.join(checkpoint_dir, f'state_step_{global_step}.pt')
                     try:
                         if run:
+                            # Save locally first
+                            torch.save(state, full_state_path)
+                            # print(f"Temporarily saved full state to {full_state_path}") # Optional debug print
+
                             artifact_name = f'full_state_step_{global_step}'
                             artifact_state = wandb.Artifact(
                                 name=artifact_name,
                                 type='model-state',
                                 metadata={'epoch': epoch + 1, 'step': global_step, 'loss': loss.item() if isinstance(loss, torch.Tensor) else None}
                             )
-                            with io.BytesIO() as buffer:
-                                torch.save(state, buffer)
-                                buffer.seek(0)
-                                artifact_state.add_file(wandb.File(name=f'state_step_{global_step}.pt', mode="wb", data=buffer))
+                            artifact_state.add_file(full_state_path) # Add the local file path
                             run.log_artifact(artifact_state)
                             print(f"Logged full state artifact to W&B: {artifact_name}")
+
+                            # Remove local file after successful upload
+                            os.remove(full_state_path)
+                            # print(f"Removed local file: {full_state_path}") # Optional debug print
                         else:
                              print("Skipping full state artifact logging: W&B run not active.")
                     except Exception as e:
-                         print(f"Error logging full state artifact at step {global_step}: {e}")
+                         print(f"Error saving/logging full state artifact at step {global_step}: {e}")
+                         # Clean up local file if save succeeded but logging failed, and file exists
+                         if os.path.exists(full_state_path):
+                             try: os.remove(full_state_path) 
+                             except Exception as e_rem: print(f"Error removing temp file {full_state_path}: {e_rem}")
 
-                    # 2. Save EMA Weights to Buffer and Log Artifact
+                    # 2. Save EMA Weights, Log Artifact, then Remove Local File
+                    ema_weights_path = os.path.join(checkpoint_dir, f'ema_weights_step_{global_step}.pt')
                     try:
                         if run:
                             ema.store(score_model.parameters())
                             ema.copy_to(score_model.parameters())
+                            
+                            # Save locally first
+                            torch.save(score_model.state_dict(), ema_weights_path)
+                            # print(f"Temporarily saved EMA weights to {ema_weights_path}") # Optional debug print
                             
                             artifact_name_ema = f'ema_weights_step_{global_step}'
                             artifact_ema = wandb.Artifact(
@@ -289,18 +304,24 @@ def main(cfg: DictConfig):
                                 type='model',
                                 metadata={'epoch': epoch + 1, 'step': global_step, 'loss': loss.item() if isinstance(loss, torch.Tensor) else None}
                             )
-                            with io.BytesIO() as buffer:
-                                torch.save(score_model.state_dict(), buffer)
-                                buffer.seek(0)
-                                artifact_ema.add_file(wandb.File(name=f'ema_weights_step_{global_step}.pt', mode="wb", data=buffer))
+                            artifact_ema.add_file(ema_weights_path) # Add the local file path
                             run.log_artifact(artifact_ema)
                             print(f"Logged EMA weights artifact to W&B: {artifact_name_ema}")
-                            
+
+                            # Remove local file after successful upload
+                            os.remove(ema_weights_path)
+                            # print(f"Removed local file: {ema_weights_path}") # Optional debug print
+
                             ema.restore(score_model.parameters()) # IMPORTANT: Restore non-EMA weights
                         else:
                              print("Skipping EMA weights artifact logging: W&B run not active.")
                     except Exception as e:
-                        print(f"Error logging EMA weights artifact at step {global_step}: {e}")
+                        print(f"Error saving/logging EMA weights artifact at step {global_step}: {e}")
+                        # Clean up local file if save succeeded but logging failed, and file exists
+                        if os.path.exists(ema_weights_path):
+                            try: os.remove(ema_weights_path)
+                            except Exception as e_rem: print(f"Error removing temp file {ema_weights_path}: {e_rem}")
+                        # Ensure restore happens even if logging fails
                         if 'ema' in locals() and 'score_model' in locals():
                              try:
                                  ema.restore(score_model.parameters())
