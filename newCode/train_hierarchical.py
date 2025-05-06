@@ -124,22 +124,22 @@ def main(cfg: DictConfig):
         # Load tokenizer
         tokenizer = GPT2TokenizerFast.from_pretrained('gpt2')
 
-        # Determine config source for training params
-        current_cfg = wandb.config if run else cfg
-
         # Create data loaders using absolute paths
+        # Read batch_size specifically
+        batch_size_val = wandb.config.training['batch_size'] if run else cfg.training.batch_size
         train_loader = get_math_dataloaders(
             cfg_data_train_abs,
-            batch_size=current_cfg.training['batch_size'] # Use dictionary access for wandb.config
+            batch_size=batch_size_val 
         )
         # Add validation loader here if you implement it
 
         # Calculate total steps and checkpoint frequency
         num_examples = len(train_loader.dataset)
-        batch_size = current_cfg.training['batch_size']
-        steps_per_epoch = math.ceil(num_examples / batch_size)
+        # Use batch_size_val already determined
+        steps_per_epoch = math.ceil(num_examples / batch_size_val)
         # Read num_epochs from config, default to 10000
-        num_epochs = current_cfg.training.get('num_epochs', 10000) # Use get with default
+        # Use get with default, access appropriate config object
+        num_epochs = wandb.config.training.get('num_epochs', 10000) if run else cfg.training.get('num_epochs', 10000)
 
         total_steps = steps_per_epoch * num_epochs
         # Calculate frequency to save ~100 checkpoints, ensure it's at least 1
@@ -150,24 +150,25 @@ def main(cfg: DictConfig):
         print(f"Training for {num_epochs} epochs, total approx {total_steps} steps")
         print(f"Saving checkpoint artifact every {checkpoint_saving_freq} steps.")
 
-        # Initialize models
-        # Pass the appropriate config object (OmegaConf or wandb.config)
-        score_model = SEDD(current_cfg).to(device)
+        # Initialize models - PASS ORIGINAL cfg
+        score_model = SEDD(cfg).to(device)
+        # Read EMA decay specifically
+        ema_decay = wandb.config.training['ema'] if run else cfg.training.ema
         ema = ExponentialMovingAverage(
             score_model.parameters(),
-            decay=current_cfg.training['ema']
+            decay=ema_decay
         )
 
-        # Initialize noise and graph
-        noise = noise_lib.get_noise(current_cfg).to(device)
-        graph = graph_lib.get_graph(current_cfg, device)
+        # Initialize noise and graph - PASS ORIGINAL cfg
+        noise = noise_lib.get_noise(cfg).to(device)
+        graph = graph_lib.get_graph(cfg, device)
 
-        # Setup optimization
-        optimizer = losses.get_optimizer(current_cfg, score_model.parameters())
+        # Setup optimization - PASS ORIGINAL cfg
+        optimizer = losses.get_optimizer(cfg, score_model.parameters())
         scaler = torch.cuda.amp.GradScaler()
 
-        # Get optimization function from the original codebase
-        optimize_fn = losses.optimization_manager(current_cfg)
+        # Get optimization function from the original codebase - PASS ORIGINAL cfg
+        optimize_fn = losses.optimization_manager(cfg)
 
         # Create state dict (ensure model is correctly referenced)
         state = {
@@ -181,12 +182,14 @@ def main(cfg: DictConfig):
         }
 
         # Get training step function
+        # Read accum specifically
+        accum_val = wandb.config.training['accum'] if run else cfg.training.accum
         train_step_fn = get_hierarchical_step_fn(
             noise,
             graph,
             train=True,
             optimize_fn=optimize_fn,
-            accum=current_cfg.training['accum']
+            accum=accum_val
         )
 
         # Training loop
@@ -234,7 +237,8 @@ def main(cfg: DictConfig):
                 step_pbar.set_postfix({'loss': f'{loss.item():.4f}' if isinstance(loss, torch.Tensor) else 'N/A'})
 
                 # Logging
-                log_freq = current_cfg.training['log_freq']
+                # Read log_freq specifically
+                log_freq = wandb.config.training['log_freq'] if run else cfg.training.log_freq
                 if global_step % log_freq == 0 and isinstance(loss, torch.Tensor):
                     avg_loss_so_far = epoch_loss / steps_this_epoch if steps_this_epoch > 0 else loss.item()
                     epoch_pbar.set_postfix({'avg_loss': f'{avg_loss_so_far:.4f}'})
