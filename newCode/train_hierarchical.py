@@ -171,7 +171,7 @@ def main(cfg):
             f'checkpoint_epoch_{epoch+1}.pt'
         )
         torch.save(state, checkpoint_path)
-        print(f"Saved checkpoint for epoch {epoch+1}")
+        print(f"Saved checkpoint for epoch {epoch+1} to directory: {os.path.dirname(checkpoint_path)}")
         
         # Save EMA weights separately (often better for inference)
         ema.store(score_model.parameters())
@@ -182,7 +182,7 @@ def main(cfg):
         )
         torch.save(score_model.state_dict(), ema_path)
         ema.restore(score_model.parameters())
-        print(f"Saved EMA weights for epoch {epoch+1}")
+        print(f"Saved EMA weights for epoch {epoch+1} to directory: {os.path.dirname(ema_path)}")
     
     # End of training
     print("\nTraining completed!")
