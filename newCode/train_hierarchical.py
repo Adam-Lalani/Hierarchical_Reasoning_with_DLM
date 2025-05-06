@@ -31,6 +31,48 @@ import losses
 from hierarchical_dataset import get_math_dataloaders
 from custom_losses import get_hierarchical_step_fn
 
+def evaluate(model_to_eval, dataloader, validation_batch_calculator_fn, epoch_num):
+    # The validation_batch_calculator_fn (which is step_fn with train=False from get_hierarchical_step_fn)
+    # will internally handle model_to_eval.eval() and also noise.eval() for the noise object it closed over.
+    # It will also use train=False for mutils.get_score_fn.
+    # It will NOT perform backprop or optimizer steps.
+
+    total_val_loss = 0.0
+    num_val_samples = 0
+    print(f"\nStarting validation for epoch {epoch_num + 1}...")
+
+    # Create a minimal state dict for the evaluation function if needed by validation_batch_calculator_fn
+    # The step_fn from get_hierarchical_step_fn expects a state dict with at least a 'model' key.
+    eval_state = {'model': model_to_eval} 
+
+    # model_to_eval.eval() is called inside validation_batch_calculator_fn (when train=False)
+    # noise.eval() is also called inside validation_batch_calculator_fn (when train=False)
+
+    with torch.no_grad(): # Ensure no gradients are computed during validation
+        val_pbar = tqdm(dataloader, desc=f"Validation Epoch {epoch_num + 1}", leave=False)
+        for batch in val_pbar:
+            loss_output = validation_batch_calculator_fn(eval_state, batch)
+
+            if isinstance(loss_output, torch.Tensor):
+                total_val_loss += loss_output.item() * batch['input_ids'].shape[0] 
+                num_val_samples += batch['input_ids'].shape[0]
+                val_pbar.set_postfix({'val_loss': f'{loss_output.item():.4f}'})
+            else:
+                print("Warning: Validation step returned non-tensor loss or None.")
+    
+    # Set the model passed to evaluate back to train() mode, as the main loop expects it.
+    # The noise model that validation_batch_calculator_fn used (from its closure) was set to eval().
+    # The main noise object in the training loop will be set to train() before the next training steps.
+    model_to_eval.train()
+    # Removed: if hasattr(state['noise'], 'train'): state['noise'].train() # state is not in scope
+
+    if num_val_samples == 0:
+        print("Warning: No samples processed during validation, returning inf.")
+        return float('inf')
+    avg_val_loss = total_val_loss / num_val_samples
+    print(f"Validation for epoch {epoch_num + 1} finished. Average Validation Loss: {avg_val_loss:.4f}")
+    return avg_val_loss
+
 @hydra.main(config_path="../configs", config_name="config", version_base="1.1")
 def main(cfg: DictConfig):
     run = None # Initialize run to None for error handling
@@ -202,13 +244,20 @@ def main(cfg: DictConfig):
             accum=accum_val
         )
 
+        # Get the validation batch evaluation function (only if valid_loader is successfully created)
+        validation_batch_eval_fn = None # Initialize to None
+        if valid_path: # Check if valid_path was successfully created before defining this
+            validation_batch_eval_fn = get_hierarchical_step_fn(
+                noise, graph, train=False, optimize_fn=None, accum=1 
+            )
+
         # Training loop
         print("Starting training...")
         global_step = 0
 
         # For loss tracking
-        epoch_losses = []
-        # step_log_losses = [] # Can remove if only plotting epoch loss
+        epoch_train_losses = []
+        epoch_val_losses = []
 
         # Create progress bar for epochs
         epoch_pbar = tqdm(range(num_epochs), desc="Epochs", position=0)
@@ -224,6 +273,10 @@ def main(cfg: DictConfig):
 
             # Create progress bar for steps within epoch
             step_pbar = tqdm(range(steps_per_epoch), desc=f"Epoch {epoch+1}/{num_epochs}", position=1, leave=False)
+
+            # Training phase for the epoch
+            score_model.train() # Ensure model is in training mode for the training loop part
+            if hasattr(noise, 'train'): noise.train() # Ensure noise is in training mode
 
             for step_in_epoch in step_pbar:
                 try:
@@ -340,13 +393,23 @@ def main(cfg: DictConfig):
 
             # End of step_in_epoch loop
 
+            avg_epoch_loss = epoch_loss / steps_this_epoch if steps_this_epoch > 0 else 0.0
+            epoch_train_losses.append(avg_epoch_loss)
+
+            current_val_loss = None
+            if valid_path and validation_batch_eval_fn:
+                # Note: `evaluate` function will handle model.eval() and model.train() internally
+                current_val_loss = evaluate(score_model, valid_loader, validation_batch_eval_fn, epoch)
+                if current_val_loss != float('inf'): 
+                    epoch_val_losses.append(current_val_loss)
+
         # End of epoch loop
         epoch_end_time = time.time()
         epoch_duration = epoch_end_time - epoch_start_time
         # Handle case where epoch had 0 valid steps/losses
         avg_epoch_loss = epoch_loss / steps_this_epoch if steps_this_epoch > 0 else 0.0
         if steps_this_epoch > 0: # Only append if loss was calculated
-             epoch_losses.append(avg_epoch_loss)
+             epoch_train_losses.append(avg_epoch_loss)
 
         # --- W&B Log Epoch Metrics ---
         if run:
@@ -378,20 +441,20 @@ def main(cfg: DictConfig):
 
     print("Training loop finished execution (may have ended due to error or completion).")
     print("Final Loss by epoch recorded (average):") # These results are from epochs that completed *before* any potential error
-    if 'epoch_losses' in locals() and epoch_losses: # Check if list exists and is not empty
-        for i, loss_val in enumerate(epoch_losses):
+    if 'epoch_train_losses' in locals() and epoch_train_losses: # Check if list exists and is not empty
+        for i, loss_val in enumerate(epoch_train_losses):
             print(f"Epoch {i+1}: {loss_val:.6f}")
     else:
         print("(No complete epochs recorded)")
 
     # --- Plotting Epoch Loss Curve (Only log to W&B, no local save of image) ---
-    if 'epoch_losses' in locals() and epoch_losses:
+    if 'epoch_train_losses' in locals() and epoch_train_losses:
         # plot_path = os.path.join(output_dir, "epoch_loss_curve.png") # No local save of plot
         try:
             # if not os.path.exists(output_dir): os.makedirs(output_dir) # output_dir should exist or not be needed for plot
-            epochs_list = range(1, len(epoch_losses) + 1)
+            epochs_list = range(1, len(epoch_train_losses) + 1)
             plt.figure(figsize=(12, 6))
-            plt.plot(epochs_list, epoch_losses, marker='o', linestyle='-', label='Average Training Loss per Epoch')
+            plt.plot(epochs_list, epoch_train_losses, marker='o', linestyle='-', label='Average Training Loss per Epoch')
             plt.xlabel("Epoch")
             plt.ylabel("Average Loss")
             plt.title("Epoch vs. Average Training Loss")

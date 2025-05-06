@@ -12,6 +12,7 @@ tokens: 50257
 training:
   num_epochs: 500 # 
   batch_size: 100 # was 2
+  eval_batch_size: 100 # Added for validation, can be same or different from batch_size
   accum: 1
   # n_iters: 100
   snapshot_freq: 10
@@ -24,7 +25,7 @@ training:
 
 data:
   train: "data_/dummy_train_set.csv"
-  valid: null
+  valid: "data_/dummy_val_set.csv" 
   cache_dir: data
   # max_length: 128
 
