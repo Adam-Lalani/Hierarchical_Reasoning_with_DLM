@@ -6,9 +6,9 @@ ngpus: 1
 tokens: 50257
 
 training:
-  batch_size: 2
+  batch_size: 100 # was 2
   accum: 1
-  n_iters: 100
+  # n_iters: 100
   snapshot_freq: 10
   log_freq: 5
   eval_freq: 10
@@ -35,7 +35,7 @@ noise:
 
 sampling:
   predictor: euler
-  steps: 128
+  steps: 16 #changed from 128 to 16
   noise_removal: True
 
 eval:
@@ -46,7 +46,7 @@ eval:
 optim:
   weight_decay: 0.0
   optimizer: AdamW
-  lr: 2e-5
+  lr: 3e-4 # was 2e-5
   beta1: 0.9
   beta2: 0.999
   eps: 1e-8
