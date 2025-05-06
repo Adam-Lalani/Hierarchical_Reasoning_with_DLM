@@ -26,7 +26,7 @@ data:
   train: "data_/dummy_train_set.csv"
   valid: null
   cache_dir: data
-  max_length: 128
+  # max_length: 128
 
 graph:
   type: absorb

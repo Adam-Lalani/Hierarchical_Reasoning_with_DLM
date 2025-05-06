@@ -258,8 +258,8 @@ def main(cfg: DictConfig):
                     # 1. Save Full State
                     full_state_path = os.path.join(checkpoint_dir, f'state_step_{global_step}.pt')
                     try:
-                        torch.save(state, full_state_path)
-                        print(f"Saved local full state to {full_state_path}")
+                        # torch.save(state, full_state_path) #commented out to avoid excessive memory usage
+                        # print(f"Saved local full state to {full_state_path}")
                         if run:
                             artifact_name = f'full_state_step_{global_step}'
                             artifact = wandb.Artifact(
@@ -279,8 +279,8 @@ def main(cfg: DictConfig):
                     try:
                         ema.store(score_model.parameters())
                         ema.copy_to(score_model.parameters())
-                        torch.save(score_model.state_dict(), ema_weights_path)
-                        print(f"Saved local EMA weights to {ema_weights_path}")
+                        # torch.save(score_model.state_dict(), ema_weights_path) #commented out to avoid excessive memory usage
+                        # print(f"Saved local EMA weights to {ema_weights_path}")
                         ema.restore(score_model.parameters()) # IMPORTANT: Restore non-EMA weights
 
                         if run:
