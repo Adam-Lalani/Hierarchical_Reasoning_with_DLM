@@ -8,6 +8,7 @@ import math
 import time
 from tqdm import tqdm
 import yaml
+import io # Ensure io is imported
 
 # 1. Add imports
 import wandb
@@ -58,6 +59,12 @@ def main(cfg: DictConfig):
                 save_code=True,              # Optional: save main script to W&B
             )
             print(f"W&B initialized successfully. Project: {wandb_project}, Entity: {wandb_entity}")
+
+            if run:
+                # Update output_dir if W&B run is active
+                output_dir = f"outputs/{run.id}"
+                log_dir = os.path.join(output_dir, "logs")
+                checkpoint_dir = os.path.join(output_dir, "checkpoints")
         except ValueError as ve:
              # Raised if entity is missing
              print(str(ve))
@@ -93,28 +100,23 @@ def main(cfg: DictConfig):
             print(f"GPU: {torch.cuda.get_device_name()}")
             print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
 
-        # Create output directories (still useful for local logs/plots)
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        # If W&B is active, maybe incorporate run name/id into output_dir?
-        run_id = run.id if run else timestamp
-        output_dir = f"outputs/{run_id}"
-        checkpoint_dir = os.path.join(output_dir, "checkpoints") # Dir for temporary local saves
-        log_dir = os.path.join(output_dir, "logs")
-        os.makedirs(checkpoint_dir, exist_ok=True)
-        os.makedirs(log_dir, exist_ok=True)
+        # Create local output directories (W&B also creates its own ./wandb/ dir)
+        os.makedirs(checkpoint_dir, exist_ok=True) # checkpoint_dir might not be strictly needed if no local saves
+        os.makedirs(log_dir, exist_ok=True) # log_dir might not be strictly needed if no local logs
 
-        # Save configuration locally (optional if using W&B config)
-        # We use wandb.config if available, otherwise original cfg
+        # Save configuration locally (optional, W&B logs config automatically)
+        # You might decide to remove this local config saving too
         try:
+            config_to_save_path = os.path.join(output_dir, "config.yaml")
             if run:
                 # wandb.config might not be directly serializable to YAML if complex objects exist
                 # Convert back to a simple dict first
                 config_dict_to_save = OmegaConf.create(wandb.config.as_dict()) # Convert back to OmegaConf then container
-                with open(os.path.join(output_dir, "config.yaml"), "w") as f:
+                with open(config_to_save_path, "w") as f:
                      OmegaConf.save(config=config_dict_to_save, f=f)
             else:
                  # Assuming original cfg is OmegaConf
-                 with open(os.path.join(output_dir, "config.yaml"), "w") as f:
+                 with open(config_to_save_path, "w") as f:
                      OmegaConf.save(config=cfg, f=f) # Use OmegaConf save
         except ImportError:
              print("PyYAML or OmegaConf missing? Skipping local config saving.")
@@ -251,60 +253,63 @@ def main(cfg: DictConfig):
                              print(f"Warning: W&B step logging failed: {wb_log_e}")
                     # --- End W&B Log ---
 
-                # --- Checkpoint Saving based on frequency ---
+                # --- Checkpoint Saving based on frequency (to W&B buffer) ---
                 if global_step > 0 and global_step % checkpoint_saving_freq == 0:
-                    print(f"Saving checkpoint artifact at step {global_step}...")
+                    print(f"\nLogging checkpoint artifact directly to W&B at step {global_step} (no local disk save for model weights)...")
 
-                    # 1. Save Full State
-                    full_state_path = os.path.join(checkpoint_dir, f'state_step_{global_step}.pt')
+                    # 1. Save Full State to Buffer and Log Artifact
                     try:
-                        # torch.save(state, full_state_path) #commented out to avoid excessive memory usage
-                        # print(f"Saved local full state to {full_state_path}")
                         if run:
                             artifact_name = f'full_state_step_{global_step}'
-                            artifact = wandb.Artifact(
+                            artifact_state = wandb.Artifact(
                                 name=artifact_name,
                                 type='model-state',
                                 metadata={'epoch': epoch + 1, 'step': global_step, 'loss': loss.item() if isinstance(loss, torch.Tensor) else None}
                             )
-                            artifact.add_file(full_state_path)
-                            run.log_artifact(artifact)
+                            with io.BytesIO() as buffer:
+                                torch.save(state, buffer)
+                                buffer.seek(0)
+                                artifact_state.add_file(buffer, name=f'state_step_{global_step}.pt')
+                            run.log_artifact(artifact_state)
                             print(f"Logged full state artifact to W&B: {artifact_name}")
-                            # os.remove(full_state_path) # Optional: remove local after upload
+                        else:
+                             print("Skipping full state artifact logging: W&B run not active.")
                     except Exception as e:
-                         print(f"Error saving/logging full state checkpoint at step {global_step}: {e}")
+                         print(f"Error logging full state artifact at step {global_step}: {e}")
 
-                    # 2. Save EMA Weights
-                    ema_weights_path = os.path.join(checkpoint_dir, f'ema_weights_step_{global_step}.pt')
+                    # 2. Save EMA Weights to Buffer and Log Artifact
                     try:
-                        ema.store(score_model.parameters())
-                        ema.copy_to(score_model.parameters())
-                        # torch.save(score_model.state_dict(), ema_weights_path) #commented out to avoid excessive memory usage
-                        # print(f"Saved local EMA weights to {ema_weights_path}")
-                        ema.restore(score_model.parameters()) # IMPORTANT: Restore non-EMA weights
-
                         if run:
-                            artifact_name = f'ema_weights_step_{global_step}'
-                            artifact = wandb.Artifact(
-                                name=artifact_name,
+                            ema.store(score_model.parameters())
+                            ema.copy_to(score_model.parameters())
+                            
+                            artifact_name_ema = f'ema_weights_step_{global_step}'
+                            artifact_ema = wandb.Artifact(
+                                name=artifact_name_ema,
                                 type='model',
                                 metadata={'epoch': epoch + 1, 'step': global_step, 'loss': loss.item() if isinstance(loss, torch.Tensor) else None}
                             )
-                            artifact.add_file(ema_weights_path)
-                            run.log_artifact(artifact)
-                            print(f"Logged EMA weights artifact to W&B: {artifact_name}")
-                            # os.remove(ema_weights_path) # Optional: remove local after upload
+                            with io.BytesIO() as buffer:
+                                torch.save(score_model.state_dict(), buffer)
+                                buffer.seek(0)
+                                artifact_ema.add_file(buffer, name=f'ema_weights_step_{global_step}.pt')
+                            run.log_artifact(artifact_ema)
+                            print(f"Logged EMA weights artifact to W&B: {artifact_name_ema}")
+                            
+                            ema.restore(score_model.parameters()) # IMPORTANT: Restore non-EMA weights
+                        else:
+                             print("Skipping EMA weights artifact logging: W&B run not active.")
                     except Exception as e:
-                        print(f"Error saving/logging EMA weights checkpoint at step {global_step}: {e}")
-                        # Ensure restore happens even if logging fails
+                        print(f"Error logging EMA weights artifact at step {global_step}: {e}")
                         if 'ema' in locals() and 'score_model' in locals():
                              try:
                                  ema.restore(score_model.parameters())
-                                 print("Restored non-EMA weights after logging failure.")
+                                 print("Restored non-EMA weights after artifact logging failure.")
                              except Exception as restore_e:
-                                 print(f"Error restoring EMA weights after logging failure: {restore_e}")
+                                 print(f"Error restoring EMA weights: {restore_e}")
+                # --- End Checkpoint Saving ---
 
-            # --- End Checkpoint Saving ---
+            # End of step_in_epoch loop
 
         # End of epoch loop
         epoch_end_time = time.time()
@@ -331,19 +336,6 @@ def main(cfg: DictConfig):
         print(f"Epoch {epoch+1}/{num_epochs} completed in {epoch_duration:.2f}s")
         print(f"Average Training Loss: {avg_epoch_loss:.4f}")
 
-        # Save epoch metrics locally
-        try:
-             with open(os.path.join(log_dir, f"epoch_{epoch+1}_metrics.txt"), "w") as f:
-                 f.write(f"Epoch: {epoch+1}\n")
-                 f.write(f"Average Training Loss: {avg_epoch_loss:.6f}\n")
-                 # Add validation loss here if implemented
-                 f.write(f"Duration: {epoch_duration:.2f}s\n")
-                 f.write(f"Steps: {steps_this_epoch}\n")
-        except Exception as e:
-             print(f"Error saving local epoch metrics: {e}")
-
-        # === OLD CHECKPOINT SAVING LOGIC REMOVED ===
-
     finally:
         # --- Finish W&B Run ---
         if run:
@@ -363,49 +355,33 @@ def main(cfg: DictConfig):
     else:
         print("(No complete epochs recorded)")
 
-    # --- Save epoch loss data locally ---
+    # --- Plotting Epoch Loss Curve (Only log to W&B, no local save of image) ---
     if 'epoch_losses' in locals() and epoch_losses:
-        epoch_loss_path = os.path.join(log_dir, "epoch_losses.json") # log_dir needs to be defined outside the try block or handled
+        # plot_path = os.path.join(output_dir, "epoch_loss_curve.png") # No local save of plot
         try:
-            # Ensure log_dir exists if an early error occurred before its creation
-            if not os.path.exists(log_dir): os.makedirs(log_dir) 
-            with open(epoch_loss_path, "w") as f:
-                epoch_loss_data = [[i+1, loss_val] for i, loss_val in enumerate(epoch_losses)]
-                json.dump(epoch_loss_data, f)
-            print(f"Saved epoch loss data to {epoch_loss_path}")
-        except Exception as e:
-            print(f"Error saving epoch loss data: {e}")
-    # --- End saving epoch loss data ---
-
-    # --- Plotting Epoch Loss Curve ---
-    if 'epoch_losses' in locals() and epoch_losses:
-        plot_path = os.path.join(output_dir, "epoch_loss_curve.png") # output_dir needs definition scope check
-        try:
-            # Ensure output_dir exists if an early error occurred
-            if not os.path.exists(output_dir): os.makedirs(output_dir)
-                
+            # if not os.path.exists(output_dir): os.makedirs(output_dir) # output_dir should exist or not be needed for plot
             epochs_list = range(1, len(epoch_losses) + 1)
             plt.figure(figsize=(12, 6))
             plt.plot(epochs_list, epoch_losses, marker='o', linestyle='-', label='Average Training Loss per Epoch')
             plt.xlabel("Epoch")
             plt.ylabel("Average Loss")
             plt.title("Epoch vs. Average Training Loss")
-            if len(epochs_list) <= 20 : # Avoid overcrowding ticks for many epochs
+            if len(epochs_list) <= 20:
                  plt.xticks(epochs_list)
             plt.legend()
             plt.grid(True)
-            plt.savefig(plot_path)
-            print(f"Saved epoch loss plot to {plot_path}")
+            # plt.savefig(plot_path) # REMOVED local save of plot
+            # print(f"Saved epoch loss plot to {plot_path}") # REMOVED
 
-            # --- W&B Log Plot ---
-            if run: # Check if run object exists (might have failed init)
+            # --- W&B Log Plot --- 
+            if run:
                  try:
-                     wandb.log({"epoch_loss_curve": wandb.Image(plot_path)}, step=global_step if 'global_step' in locals() else None) # Use final global_step if available
+                     # Log the matplotlib figure object directly to W&B
+                     wandb.log({"epoch_loss_curve": plt}, step=global_step if 'global_step' in locals() else None)
+                     print("Logged epoch loss plot to W&B.")
                  except Exception as e:
                      print(f"Error logging plot to W&B: {e}")
-            # --- End W&B Log ---
             plt.close()
-
         except ImportError:
             print("Matplotlib not found. Skipping plot generation.")
         except Exception as e:
@@ -414,31 +390,6 @@ def main(cfg: DictConfig):
     else:
          print("No epoch losses recorded, skipping plot generation.")
     # --- End Plotting Epoch Loss Curve ---
-
-    # --- Save final metrics locally ---
-    if 'epoch_losses' in locals(): # Check if list exists
-        final_metrics_path = os.path.join(output_dir, "final_metrics.txt")
-        try:
-            if not os.path.exists(output_dir): os.makedirs(output_dir)
-            with open(final_metrics_path, "w") as f:
-                f.write(f"Total Epochs Trained: {len(epoch_losses)}\n") # Use actual number trained
-                if epoch_losses:
-                    f.write(f"Final Average Loss: {epoch_losses[-1]:.6f}\n")
-                f.write("Loss by epoch:\n")
-                for i, loss_val in enumerate(epoch_losses):
-                    f.write(f"Epoch {i+1}: {loss_val:.6f}\n")
-        except Exception as e:
-             print(f"Error saving local final metrics: {e}")
-
-    # --- Log final metrics file as W&B artifact (optional) ---
-    if run and 'final_metrics_path' in locals() and os.path.exists(final_metrics_path):
-        try:
-            artifact = wandb.Artifact(name='final_metrics', type='results')
-            artifact.add_file(final_metrics_path)
-            run.log_artifact(artifact)
-            print("Logged final metrics file to W&B.")
-        except Exception as e:
-            print(f"Error logging final metrics artifact: {e}")
 
 if __name__ == "__main__":
     main() 
