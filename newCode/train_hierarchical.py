@@ -36,25 +36,35 @@ def main(cfg: DictConfig):
     try:
         # --- W&B Initialization ---
         try:
+            # Read W&B details from config
+            wandb_cfg = cfg.get('wandb', {}) # Get wandb section, default to empty dict
+            wandb_entity = wandb_cfg.get('entity')
+            wandb_project = wandb_cfg.get('project', 'default-project') # Default project if not set
+
+            if not wandb_entity:
+                print("Warning: W&B entity not set in config file (cfg.wandb.entity). Skipping W&B initialization.")
+                raise ValueError("W&B entity is required in config.")
+
             # Convert OmegaConf to dict for W&B logging
-            # Using resolve=True ensures variables like ${data.root} are substituted
             config_dict = OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
 
-            # Initialize a W&B run
+            # Initialize a W&B run using config values
             run = wandb.init(
-                project="hierarchical-reasoning", # <<< CHANGE THIS Project name on W&B
-                entity="...", # <<< CHANGE THIS Replace with your W&B username/team
+                project=wandb_project, 
+                entity=wandb_entity, 
                 config=config_dict,          # Log your Hydra configuration
                 name=f"run-{time.strftime('%Y%m%d-%H%M%S')}", # Optional: custom run name
                 job_type="training",         # Optional: categorize run type
                 save_code=True,              # Optional: save main script to W&B
             )
-            # Make config accessible via wandb.config (potentially changes type)
-            # Access config items like wandb.config.training['batch_size'] or wandb.config['training']['batch_size']
-            print("W&B initialized successfully.")
+            print(f"W&B initialized successfully. Project: {wandb_project}, Entity: {wandb_entity}")
+        except ValueError as ve:
+             # Raised if entity is missing
+             print(str(ve))
+             run = None
         except Exception as e:
             print(f"Error initializing W&B: {e}. Training continues without W&B.")
-            run = None # Ensure run is None if init fails
+            run = None
         # --- End W&B Initialization ---
 
         # Convert relative data paths to absolute paths
