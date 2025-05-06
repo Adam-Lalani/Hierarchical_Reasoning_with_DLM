@@ -6,6 +6,7 @@ ngpus: 1
 tokens: 50257
 
 training:
+  num_epochs: 500 # 
   batch_size: 100 # was 2
   accum: 1
   # n_iters: 100
@@ -31,7 +32,7 @@ graph:
 noise:
   type: loglinear
   sigma_min: 1e-4
-  sigma_max: 20
+  sigma_max: 10 # was 20
 
 sampling:
   predictor: euler
