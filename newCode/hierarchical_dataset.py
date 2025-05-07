@@ -60,19 +60,19 @@ class HierarchicalMathDataset(Dataset):
             'clamp_idx': clamp_idx
         }
 
-def get_math_dataloaders(train_path, valid_path=None, batch_size=32, num_workers=4):
-    """
-    Create dataloaders for the hierarchical math dataset
-    """
-    train_dataset = HierarchicalMathDataset(train_path)
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=True
-    )
+def get_math_dataloaders(train_path=None, valid_path=None, batch_size=32, num_workers=4):
+    train_loader = None
+    if train_path:
+        train_dataset = HierarchicalMathDataset(train_path)
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+            pin_memory=True
+        )
     
+    valid_loader = None
     if valid_path:
         valid_dataset = HierarchicalMathDataset(valid_path)
         valid_loader = torch.utils.data.DataLoader(
@@ -82,6 +82,5 @@ def get_math_dataloaders(train_path, valid_path=None, batch_size=32, num_workers
             num_workers=num_workers,
             pin_memory=True
         )
-        return train_loader, valid_loader
     
-    return train_loader 
+    return train_loader, valid_loader 
