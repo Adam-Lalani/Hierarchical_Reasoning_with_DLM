@@ -421,7 +421,10 @@ def main(cfg: DictConfig):
                      'epoch': epoch + 1, # Log 1-based epoch index
                      'epoch_duration_sec': epoch_duration,
                  }
-                 # Add validation loss logging here if implemented
+                 # Add validation loss to the log_data dictionary if it was computed
+                 if current_val_loss is not None and current_val_loss != float('inf'):
+                     log_data['valid/epoch_loss'] = current_val_loss
+                 
                  wandb.log(log_data, step=global_step) # Log against global step
              except Exception as wb_log_e:
                  print(f"Warning: W&B epoch logging failed: {wb_log_e}")
@@ -429,6 +432,11 @@ def main(cfg: DictConfig):
 
         print(f"Epoch {epoch+1}/{num_epochs} completed in {epoch_duration:.2f}s")
         print(f"Average Training Loss: {avg_epoch_loss:.4f}")
+        # Add a print for validation loss if it was computed
+        if current_val_loss is not None and current_val_loss != float('inf'):
+            print(f"Average Validation Loss: {current_val_loss:.4f}")
+        elif cfg_data_valid_abs: # Only print this if validation was expected
+            print("Validation not performed or resulted in invalid loss this epoch.")
 
     finally:
         # --- Finish W&B Run ---
