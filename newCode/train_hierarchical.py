@@ -9,6 +9,7 @@ import time
 from tqdm import tqdm
 import yaml
 import io # Ensure io is imported
+import logging
 
 # 1. Add imports
 import wandb
@@ -188,16 +189,14 @@ def main(cfg: DictConfig):
         num_epochs = wandb.config.training.get('num_epochs', 10000) if run else cfg.training.get('num_epochs', 10000)
 
         total_steps = steps_per_epoch * num_epochs
-        # Calculate frequency to save ~100 checkpoints, ensure it's at least 1
-        # For testing with dummy dataset, ensure a minimum frequency (e.g., 50) 
-        # so checkpoints are saved even if total_steps // 100 is very small or 0.
-        # Adjust MIN_SAVE_FREQ_FOR_TESTING as needed.
-        MIN_SAVE_FREQ_FOR_TESTING = 50 
-        calculated_freq = max(1, total_steps // 100) if total_steps > 0 else 100 # Avoid division by zero
-        checkpoint_saving_freq = max(calculated_freq, MIN_SAVE_FREQ_FOR_TESTING) if num_examples < 1000 else calculated_freq # Apply min only for small (dummy) datasets
-        # Add a specific override if total_steps is very small (e.g. dummy data one epoch)
-        if total_steps <= MIN_SAVE_FREQ_FOR_TESTING:
-            checkpoint_saving_freq = max(1, total_steps // 2) if total_steps > 1 else 1 # Save at least once or twice if very few steps
+        
+        # --- Calculate checkpoint frequency for approximately 10 saves across the run --- 
+        if total_steps > 0:
+            checkpoint_saving_freq = max(1, total_steps // 10) # Ensure frequency is at least 1
+        else:
+            checkpoint_saving_freq = 1 # Default to saving every step if total_steps is 0 or unknown
+            logging.warning("Total steps calculated as 0. Check epoch/batch size config. Defaulting checkpoint freq to 1.")
+        # --- End frequency calculation ---
 
         print(f"Dataset size: {num_examples} examples")
         print(f"Steps per epoch: {steps_per_epoch}")
@@ -417,45 +416,45 @@ def main(cfg: DictConfig):
             else: # val_loader is None or doesn't exist
                  print(f"Epoch {epoch+1}: val_loader not available. Skipping evaluation.") # Added Log
 
-        # End of epoch loop 
-        epoch_end_time = time.time()
-        epoch_duration = epoch_end_time - epoch_start_time
-        # Handle case where epoch had 0 valid steps/losses
-        avg_epoch_loss = epoch_loss / steps_this_epoch if steps_this_epoch > 0 else 0.0
-        if steps_this_epoch > 0: # Only append if loss was calculated
-             epoch_train_losses.append(avg_epoch_loss)
+            # End of epoch loop 
+            epoch_end_time = time.time()
+            epoch_duration = epoch_end_time - epoch_start_time
+            # Handle case where epoch had 0 valid steps/losses
+            avg_epoch_loss = epoch_loss / steps_this_epoch if steps_this_epoch > 0 else 0.0
+            if steps_this_epoch > 0: # Only append if loss was calculated
+                epoch_train_losses.append(avg_epoch_loss)
 
-        # --- W&B Log Epoch Metrics ---
-        if run:
-             print(f"--- Epoch {epoch+1}: Preparing to log metrics to W&B --- ") # Added Log
-             try:
-                 log_data = {
-                     'train/epoch_loss': avg_epoch_loss,
-                     'epoch': epoch + 1, # Log 1-based epoch index
-                     'epoch_duration_sec': epoch_duration,
-                 }
-                 # Add validation loss to the log_data dictionary if it was computed
-                 if current_val_loss is not None and current_val_loss != float('inf'):
-                     print(f"Epoch {epoch+1}: Adding 'valid/epoch_loss': {current_val_loss:.4f} to W&B log dictionary.") # Added Log
-                     log_data['valid/epoch_loss'] = current_val_loss
-                 else:
-                     print(f"Epoch {epoch+1}: No valid validation loss ({current_val_loss}) to add to W&B log dictionary.") # Added Log
-                 
-                 print(f"Epoch {epoch+1}: Calling wandb.log() with data: {log_data}") # Added Log
-                 wandb.log(log_data, step=global_step) # Log against global step
-                 print(f"Epoch {epoch+1}: wandb.log() call executed.") # Added Log
-             except Exception as wb_log_e:
-                 # Original warning kept, but added print indicates the try block was entered.
-                 print(f"Warning: W&B epoch logging failed within try block: {wb_log_e}")
-        # --- End W&B Log ---
+            # --- W&B Log Epoch Metrics ---
+            if run:
+                print(f"--- Epoch {epoch+1}: Preparing to log metrics to W&B --- ") # Added Log
+                try:
+                    log_data = {
+                        'train/epoch_loss': avg_epoch_loss,
+                        'epoch': epoch + 1, # Log 1-based epoch index
+                        'epoch_duration_sec': epoch_duration,
+                    }
+                    # Add validation loss to the log_data dictionary if it was computed
+                    if current_val_loss is not None and current_val_loss != float('inf'):
+                        print(f"Epoch {epoch+1}: Adding 'valid/epoch_loss': {current_val_loss:.4f} to W&B log dictionary.") # Added Log
+                        log_data['valid/epoch_loss'] = current_val_loss
+                    else:
+                        print(f"Epoch {epoch+1}: No valid validation loss ({current_val_loss}) to add to W&B log dictionary.") # Added Log
+                    
+                    print(f"Epoch {epoch+1}: Calling wandb.log() with data: {log_data}") # Added Log
+                    wandb.log(log_data, step=global_step) # Log against global step
+                    print(f"Epoch {epoch+1}: wandb.log() call executed.") # Added Log
+                except Exception as wb_log_e:
+                    # Original warning kept, but added print indicates the try block was entered.
+                    print(f"Warning: W&B epoch logging failed within try block: {wb_log_e}")
+            # --- End W&B Log ---
 
-        print(f"Epoch {epoch+1}/{num_epochs} completed in {epoch_duration:.2f}s")
-        print(f"Average Training Loss: {avg_epoch_loss:.4f}")
-        # Add a print for validation loss if it was computed
-        if current_val_loss is not None and current_val_loss != float('inf'):
-            print(f"Average Validation Loss: {current_val_loss:.4f}")
-        elif cfg_data_valid_abs: # Only print this if validation was expected
-            print("Validation not performed or resulted in invalid loss this epoch.")
+            print(f"Epoch {epoch+1}/{num_epochs} completed in {epoch_duration:.2f}s")
+            print(f"Average Training Loss: {avg_epoch_loss:.4f}")
+            # Add a print for validation loss if it was computed
+            if current_val_loss is not None and current_val_loss != float('inf'):
+                print(f"Average Validation Loss: {current_val_loss:.4f}")
+            elif cfg_data_valid_abs: # Only print this if validation was expected
+                print("Validation not performed or resulted in invalid loss this epoch.")
 
     finally:
         # --- Finish W&B Run ---
