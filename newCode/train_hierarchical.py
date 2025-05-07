@@ -116,6 +116,7 @@ def main(cfg: DictConfig):
             run = None
         # --- End W&B Initialization ---
 
+
         # Convert relative data paths to absolute paths
         # Handle potential type change after wandb.init
         if run:
@@ -171,8 +172,9 @@ def main(cfg: DictConfig):
         # Create data loaders using absolute paths
         # Read batch_size specifically
         batch_size_val = wandb.config.training['batch_size'] if run else cfg.training.batch_size
-        train_loader = get_math_dataloaders(
+        train_loader, val_loader = get_math_dataloaders(
             cfg_data_train_abs,
+            cfg_data_valid_abs,
             batch_size=batch_size_val 
         )
         # Add validation loader here if you implement it
@@ -399,7 +401,7 @@ def main(cfg: DictConfig):
             current_val_loss = None
             if valid_path and validation_batch_eval_fn:
                 # Note: `evaluate` function will handle model.eval() and model.train() internally
-                current_val_loss = evaluate(score_model, valid_loader, validation_batch_eval_fn, epoch)
+                current_val_loss = evaluate(score_model, val_loader, validation_batch_eval_fn, epoch)
                 if current_val_loss != float('inf'): 
                     epoch_val_losses.append(current_val_loss)
 
