@@ -1,5 +1,5 @@
 wandb:
-  entity: "" # <<< EDIT THIS: Your W&B username or team name
+  entity: "nklatsky-brown-university" # <<< EDIT THIS: Your W&B username or team name
   project: "hierarchical-reasoning" # Default project name, can be overridden
 
 defaults:
