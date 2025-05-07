@@ -2,9 +2,9 @@
 model_checkpoint_path: null 
 
 data:
-  valid: "data_/val_set.csv"
+  valid: "data_/val_set_hlp.csv"
 
-model_checkpoint_path: null 
+tokens: 50257
 
 training:
   batch_size: 32

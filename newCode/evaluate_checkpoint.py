@@ -156,8 +156,8 @@ def main(cfg: DictConfig):
     print("Creating validation dataloader...")
     # get_math_dataloaders does not require tokenizer to be passed based on train_hierarchical.py
     _, val_loader = get_math_dataloaders(
-        train_file=None, # No training data needed
-        valid_file=cfg_data_valid_abs,
+        train_path=None, # No training data needed
+        valid_path=cfg_data_valid_abs,
         batch_size=batch_size
     )
     if val_loader is None:
