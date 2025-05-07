@@ -10,9 +10,9 @@ ngpus: 1
 tokens: 50257
 
 training:
-  num_epochs: 500 # 
-  batch_size: 100 # was 2
-  eval_batch_size: 100 # Added for validation, can be same or different from batch_size
+  num_epochs: 10 # 
+  batch_size: 32 #
+  eval_batch_size: 32 # Added for validation, can be same or different from batch_size
   accum: 1
   # n_iters: 100
   snapshot_freq: 10
