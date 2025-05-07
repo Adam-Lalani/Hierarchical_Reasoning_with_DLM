@@ -1,5 +1,18 @@
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false" # Or "true" if you want to risk it, but false is safer for this warning
+
+
+import sys
+import os
+
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
+
+import load_model
+
+
 import torch
-from load_model import load_model
+
 from transformers import GPT2TokenizerFast
 from sampling import get_pc_sampler
 from datasets import load_dataset
@@ -11,7 +24,7 @@ from fractions import Fraction
 device = torch.device('cuda')
 
 model_path = "louaaron/sedd-small"
-model, graph, noise = load_model(model_path, device)
+model, graph, noise = load.load_model(model_path, device)
 
 
 # Load GSM8K test examples
