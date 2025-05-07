@@ -476,41 +476,5 @@ def main(cfg: DictConfig):
     else:
         print("(No complete epochs recorded)")
 
-    # --- Plotting Epoch Loss Curve (Only log to W&B, no local save of image) ---
-    if 'epoch_train_losses' in locals() and epoch_train_losses:
-        # plot_path = os.path.join(output_dir, "epoch_loss_curve.png") # No local save of plot
-        try:
-            # if not os.path.exists(output_dir): os.makedirs(output_dir) # output_dir should exist or not be needed for plot
-            epochs_list = range(1, len(epoch_train_losses) + 1)
-            plt.figure(figsize=(12, 6))
-            plt.plot(epochs_list, epoch_train_losses, marker='o', linestyle='-', label='Average Training Loss per Epoch')
-            plt.xlabel("Epoch")
-            plt.ylabel("Average Loss")
-            plt.title("Epoch vs. Average Training Loss")
-            if len(epochs_list) <= 20:
-                 plt.xticks(epochs_list)
-            plt.legend()
-            plt.grid(True)
-            # plt.savefig(plot_path) # REMOVED local save of plot
-            # print(f"Saved epoch loss plot to {plot_path}") # REMOVED
-
-            # --- W&B Log Plot --- 
-            if run:
-                 try:
-                     # Log the matplotlib figure object directly to W&B
-                     wandb.log({"epoch_loss_curve": plt}, step=global_step if 'global_step' in locals() else None)
-                     print("Logged epoch loss plot to W&B.")
-                 except Exception as e:
-                     print(f"Error logging plot to W&B: {e}")
-            plt.close()
-        except ImportError:
-            print("Matplotlib not found. Skipping plot generation.")
-        except Exception as e:
-            print(f"Error generating/logging plot: {e}")
-            if 'plt' in locals(): plt.close()
-    else:
-         print("No epoch losses recorded, skipping plot generation.")
-    # --- End Plotting Epoch Loss Curve ---
-
 if __name__ == "__main__":
     main() 
