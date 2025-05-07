@@ -246,7 +246,7 @@ def main(cfg: DictConfig):
             accum=accum_val
         )
 
-        # Get the validation batch evaluation function (only if valid_loader is successfully created)
+        # Get the validation batch evaluation function (only if val_loader is successfully created)
         validation_batch_eval_fn = None # Initialize to None
         if valid_path: # Check if valid_path was successfully created before defining this
             validation_batch_eval_fn = get_hierarchical_step_fn(
@@ -398,14 +398,26 @@ def main(cfg: DictConfig):
             avg_epoch_loss = epoch_loss / steps_this_epoch if steps_this_epoch > 0 else 0.0
             epoch_train_losses.append(avg_epoch_loss)
 
-            current_val_loss = None
-            if valid_path and validation_batch_eval_fn:
+            current_val_loss = None # Initialize
+            print(f"--- Epoch {epoch+1}: Checking for validation --- ") # Added Log
+            # Ensure both val_loader and validation_batch_eval_fn exist before evaluating
+            # Note: The original attached code might have had older condition `if valid_path...`, ensure it uses `val_loader` now.
+            if 'val_loader' in locals() and val_loader and validation_batch_eval_fn:
+                print(f"Epoch {epoch+1}: Starting evaluation step.") # Added Log
                 # Note: `evaluate` function will handle model.eval() and model.train() internally
                 current_val_loss = evaluate(score_model, val_loader, validation_batch_eval_fn, epoch)
-                if current_val_loss != float('inf'): 
+                print(f"Epoch {epoch+1}: Evaluation function returned: {current_val_loss}") # Added Log
+                if current_val_loss is not None and current_val_loss != float('inf'): 
+                    print(f"Epoch {epoch+1}: Appending valid validation loss {current_val_loss:.4f} to local list.") # Added Log
                     epoch_val_losses.append(current_val_loss)
+                else:
+                    print(f"Epoch {epoch+1}: Evaluation returned invalid loss: {current_val_loss}") # Added Log
+            elif 'val_loader' in locals() and val_loader and not validation_batch_eval_fn:
+                 print(f"Epoch {epoch+1}: val_loader exists but validation_batch_eval_fn is missing. Skipping evaluation.") # Added Log
+            else: # val_loader is None or doesn't exist
+                 print(f"Epoch {epoch+1}: val_loader not available. Skipping evaluation.") # Added Log
 
-        # End of epoch loop
+        # End of epoch loop 
         epoch_end_time = time.time()
         epoch_duration = epoch_end_time - epoch_start_time
         # Handle case where epoch had 0 valid steps/losses
@@ -415,6 +427,7 @@ def main(cfg: DictConfig):
 
         # --- W&B Log Epoch Metrics ---
         if run:
+             print(f"--- Epoch {epoch+1}: Preparing to log metrics to W&B --- ") # Added Log
              try:
                  log_data = {
                      'train/epoch_loss': avg_epoch_loss,
@@ -423,11 +436,17 @@ def main(cfg: DictConfig):
                  }
                  # Add validation loss to the log_data dictionary if it was computed
                  if current_val_loss is not None and current_val_loss != float('inf'):
+                     print(f"Epoch {epoch+1}: Adding 'valid/epoch_loss': {current_val_loss:.4f} to W&B log dictionary.") # Added Log
                      log_data['valid/epoch_loss'] = current_val_loss
+                 else:
+                     print(f"Epoch {epoch+1}: No valid validation loss ({current_val_loss}) to add to W&B log dictionary.") # Added Log
                  
+                 print(f"Epoch {epoch+1}: Calling wandb.log() with data: {log_data}") # Added Log
                  wandb.log(log_data, step=global_step) # Log against global step
+                 print(f"Epoch {epoch+1}: wandb.log() call executed.") # Added Log
              except Exception as wb_log_e:
-                 print(f"Warning: W&B epoch logging failed: {wb_log_e}")
+                 # Original warning kept, but added print indicates the try block was entered.
+                 print(f"Warning: W&B epoch logging failed within try block: {wb_log_e}")
         # --- End W&B Log ---
 
         print(f"Epoch {epoch+1}/{num_epochs} completed in {epoch_duration:.2f}s")
