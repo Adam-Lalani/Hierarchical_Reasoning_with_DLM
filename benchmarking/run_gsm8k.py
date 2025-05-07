@@ -86,6 +86,10 @@ def extract_numeric(text):
         return None
 
 
+print(samples[0])
+print(samples[1])
+print(samples[2])
+print('\n\n')
 
 for sample in samples:
     pred = extract_numeric(sample['predicted_answer'])
@@ -97,3 +101,7 @@ for sample in samples:
 
 accuracy = correct / total if total > 0 else 0.0
 print(f"Robust Numeric Accuracy: {accuracy:.2%}")
+
+print(samples[0])
+print(samples[1])
+print(samples[2])
