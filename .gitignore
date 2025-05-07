@@ -127,3 +127,6 @@ logs/
 # Large data files
 data_/*.csv
 data_/*.csv.bak
+
+
+sample_data_temp/*.csv
