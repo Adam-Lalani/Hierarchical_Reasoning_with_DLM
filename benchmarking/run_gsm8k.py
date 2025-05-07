@@ -19,7 +19,7 @@ from datasets import load_dataset
 import json
 import re
 from fractions import Fraction
-import tqdm as tqdm
+from tqdm as tqdm
 
 # 
 device = torch.device('cuda')
