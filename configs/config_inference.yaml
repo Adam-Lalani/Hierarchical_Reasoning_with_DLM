@@ -1,0 +1,33 @@
+
+model_checkpoint_path: null 
+
+data:
+  valid: "data_/val_set.csv"
+
+model_checkpoint_path: null 
+
+training:
+  batch_size: 32
+
+graph:
+  type: absorb
+  file: data
+  report_all: False
+
+noise:
+  type: loglinear
+  sigma_min: 1e-4
+  sigma_max: 10 # was 20
+
+# Model configuration
+model:
+  name: "sedd"
+#  type: "ddit"
+  hidden_size: 768
+  num_layers: 12
+  n_heads: 12
+  n_blocks: 12 
+  dropout: 0.1
+  scale_by_sigma: True
+  cond_dim: 768
+  length: 512
