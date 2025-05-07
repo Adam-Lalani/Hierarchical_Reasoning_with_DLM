@@ -19,6 +19,7 @@ from datasets import load_dataset
 import json
 import re
 from fractions import Fraction
+import tqdm as tqdm
 
 # 
 device = torch.device('cuda')
@@ -38,7 +39,7 @@ context_len = 512
 batch_size = 1
 samples = []
 
-for example in gsm8k:
+for example in tqdm(gsm8k, desc="Processing examples"):
     
     question = example["question"].strip()
     answer = example["answer"].strip()  # Used only for evaluation
