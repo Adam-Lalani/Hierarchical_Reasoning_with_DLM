@@ -8,7 +8,7 @@ import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
-import load_model
+from load_model import load_model
 
 
 import torch
@@ -25,7 +25,7 @@ import tqdm as tqdm
 device = torch.device('cuda')
 
 model_path = "louaaron/sedd-small"
-model, graph, noise = load.load_model(model_path, device)
+model, graph, noise = load_model(model_path, device)
 
 
 # Load GSM8K test examples
