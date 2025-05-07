@@ -20,6 +20,7 @@ import json
 import re
 from fractions import Fraction
 from tqdm import tqdm
+import csv
 
 # 
 device = torch.device('cuda')
@@ -72,6 +73,14 @@ for example in tqdm(gsm8k, desc="Processing examples"):
         })
 
 
+# Add code to save samples to CSV
+if samples: # Ensure samples is not empty
+    keys = samples[0].keys()
+    with open('gsm8k_samples.csv', 'w', newline='', encoding='utf-8') as output_file:
+        dict_writer = csv.DictWriter(output_file, fieldnames=keys)
+        dict_writer.writeheader()
+        dict_writer.writerows(samples)
+    print("Samples saved to gsm8k_samples.csv")
 
 
 correct = 0
