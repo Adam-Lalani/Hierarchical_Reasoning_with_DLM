@@ -209,6 +209,8 @@ def main(cfg: DictConfig):
         model_path = "louaaron/sedd-medium"
         print(f"Loading pretrained model from: {model_path}")
         score_model, graph, noise = load_model(model_path, device)
+        score_model.config.length = 512
+        score_model.to(device)
         
         # Read EMA decay specifically
         ema_decay = wandb.config.training['ema'] if run else cfg.training.ema
