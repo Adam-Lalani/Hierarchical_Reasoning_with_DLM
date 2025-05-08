@@ -28,6 +28,7 @@ import utils
 import noise_lib
 import graph_lib
 import losses
+from load_model import load_model  # Import the load_model function
 
 from hierarchical_dataset import get_math_dataloaders
 from custom_losses import get_hierarchical_step_fn
@@ -204,7 +205,11 @@ def main(cfg: DictConfig):
         print(f"Saving checkpoint artifact every {checkpoint_saving_freq} steps.")
 
         # Initialize models - PASS ORIGINAL cfg
-        score_model = SEDD(cfg).to(device)
+        # Replace model initialization with loading pretrained model
+        model_path = "louaaron/sedd-medium"
+        print(f"Loading pretrained model from: {model_path}")
+        score_model, graph, noise = load_model(model_path, device)
+        
         # Read EMA decay specifically
         ema_decay = wandb.config.training['ema'] if run else cfg.training.ema
         ema = ExponentialMovingAverage(
@@ -212,9 +217,10 @@ def main(cfg: DictConfig):
             decay=ema_decay
         )
 
-        # Initialize noise and graph - PASS ORIGINAL cfg
-        noise = noise_lib.get_noise(cfg).to(device)
-        graph = graph_lib.get_graph(cfg, device)
+        # Noise and graph are already initialized by load_model
+        # No need for these lines:
+        # noise = noise_lib.get_noise(cfg).to(device)
+        # graph = graph_lib.get_graph(cfg, device)
 
         # Setup optimization - PASS ORIGINAL cfg
         optimizer = losses.get_optimizer(cfg, score_model.parameters())
