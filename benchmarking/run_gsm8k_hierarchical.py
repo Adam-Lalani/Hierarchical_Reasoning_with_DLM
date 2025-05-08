@@ -28,8 +28,8 @@ from tqdm import tqdm
 import csv
 
 # --- Configuration for model loading ---
-MODEL_CHECKPOINT_PATH = "path/to/your/model_weights.pt"
-CONFIG_PATH = "path/to/your/config.yaml"              
+MODEL_CHECKPOINT_PATH = "data_/Ema_Weights_Step_160522.pt"
+CONFIG_PATH = "configs/config.yaml"              
 # ---
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -149,6 +149,8 @@ for example in tqdm(gsm8k, desc="Processing examples"):
         # Decode only the generated part after the prefix
         decoded_output1 = tokenizer.decode(output1[0][actual_prefix_len1:], skip_special_tokens=True)
         high_level_plan_text = decoded_output1.split(eos_token)[0].strip()
+        print(decoded_output)
+        print(high_level_plan_text)
 
     # Pass 2: Generate Low-Level Reasoning (Final Answer)
     prompt2 = f"{prompt1}{high_level_plan_text} ; Low-Level Reasoning ; "
@@ -171,6 +173,13 @@ for example in tqdm(gsm8k, desc="Processing examples"):
         # Decode only the generated part after the prefix
         decoded_output2 = tokenizer.decode(output2[0][actual_prefix_len2:], skip_special_tokens=True)
         predicted_answer = decoded_output2.split(eos_token)[0].strip()
+        print(decoded_output2)
+        print(predicted_answer)
+    
+
+  
+    
+       
         
     samples.append({
         "question": question,
